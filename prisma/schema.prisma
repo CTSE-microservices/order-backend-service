@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Cart {
+  id           String     @id @default(uuid())
+  user_uuid    String
+  items        CartItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?  // soft delete
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id])
+  productId String
+  quantity  Int
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+}
+
+model Order {
+  id           String     @id @default(uuid())
+  user_uuid    String
+  items        OrderItem[]
+  status       OrderStatus @relation(fields: [statusId], references: [id])
+  statusId     String
+  statusHistory OrderStatusHistory[]
+  discount     Discount?  @relation(fields: [discountId], references: [id])
+  discountId   String?
+  total        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String
+  quantity  Int
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+}
+
+model OrderStatus {
+  id        String   @id @default(uuid())
+  name      String
+  orders    Order[]
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  statusId  String
+  status    OrderStatus @relation(fields: [statusId], references: [id])
+  changedAt DateTime @default(now())
+}
+
+model Discount {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  is_active       Boolean
+  expires_at      DateTime?
+  min_order_amount Float
+  orders          Order[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+}
