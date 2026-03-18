@@ -19,6 +19,21 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
 
+app.get('/', (req, res) => {
+	res.json({
+		service: 'order-backend-service',
+		status: 'ok',
+		docs: '/api-docs',
+		health: '/health',
+		ready: '/ready'
+	});
+});
+
+// Browsers auto-request these; return 204 to avoid noisy 404 logs.
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/apple-touch-icon.png', (req, res) => res.status(204).end());
+app.get('/apple-touch-icon-precomposed.png', (req, res) => res.status(204).end());
+
 app.get('/health', (req, res) => {
 	res.json({
 		status: 'ok',
