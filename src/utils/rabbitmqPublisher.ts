@@ -1,8 +1,8 @@
 import amqplib from 'amqplib';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 export class RabbitMQPublisher {
-  static async publish(queue: string, message: any) {
+  static async publish(queue: string, message: unknown) {
     try {
       const conn = await amqplib.connect(process.env.RABBITMQ_URL!);
       const channel = await conn.createChannel();
@@ -12,7 +12,7 @@ export class RabbitMQPublisher {
       await channel.close();
       await conn.close();
     } catch (err) {
-      logger.error('RabbitMQ publish error', err);
+      logger.error({ err }, 'RabbitMQ publish error');
     }
   }
 }

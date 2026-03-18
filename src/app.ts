@@ -3,13 +3,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { errorHandler } from './middleware/errorHandler';
-import cartRoutes from './api/routes/cartRoutes';
-import orderRoutes from './api/routes/orderRoutes';
-import discountRoutes from './api/routes/discountRoutes';
-import { swaggerSetup } from './api/swagger';
+import { errorHandler } from './middleware/errorHandler.js';
+import orderRoutes from './api/order/order.routes.js';
+import { swaggerSetup } from './api/swagger.js';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const app = express();
 
@@ -22,9 +20,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 swaggerSetup(app);
 
-app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/discounts', discountRoutes);
 
 app.use(errorHandler);
 
