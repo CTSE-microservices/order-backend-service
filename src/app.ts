@@ -6,6 +6,9 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler.js';
 import orderRoutes from './api/order/order.routes.js';
 import { swaggerSetup } from './api/swagger.js';
+import { dbConfig } from './config/database.js';
+import { redisConfig } from './config/redis.js';
+import { rabbitmqConfig } from './config/rabbitmq.js';
 
 dotenv.config({ quiet: true });
 
@@ -16,7 +19,32 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => {
+	res.json({
+		status: 'ok',
+		service: 'order-backend-service',
+		timestamp: new Date().toISOString(),
+		uptimeSeconds: Math.floor(process.uptime())
+	});
+});
+
+app.get('/ready', (req, res) => {
+	const checks = {
+		databaseUrlConfigured: Boolean(dbConfig.url),
+		redisUrlConfigured: Boolean(redisConfig.url),
+		rabbitmqUrlConfigured: Boolean(rabbitmqConfig.url),
+		jwtSecretConfigured: Boolean(process.env.JWT_SECRET)
+	};
+
+	const ready = Object.values(checks).every(Boolean);
+
+	res.status(ready ? 200 : 503).json({
+		status: ready ? 'ready' : 'not_ready',
+		service: 'order-backend-service',
+		timestamp: new Date().toISOString(),
+		checks
+	});
+});
 
 swaggerSetup(app);
 
