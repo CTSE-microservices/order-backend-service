@@ -8,7 +8,14 @@ export const jwtMiddleware = (req: Request, res: Response, next: NextFunction) =
   if (!token) return res.status(401).json({ error: 'Missing token' });
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    req.user_uuid = (decoded as any).user_uuid;
+
+    if (typeof decoded === 'object' && decoded !== null && 'user_uuid' in decoded) {
+      const { user_uuid } = decoded as { user_uuid?: unknown };
+      if (typeof user_uuid === 'string') {
+        req.user_uuid = user_uuid;
+      }
+    }
+
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid token' });
