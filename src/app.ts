@@ -5,6 +5,8 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler.js';
 import orderRoutes from './api/order/order.routes.js';
+import cartRoutes from './api/cart/cart.routes.js';
+import discountRoutes from './api/discount/discount.routes.js';
 import { swaggerSetup } from './api/swagger.js';
 import { dbConfig } from './config/database.js';
 import { redisConfig } from './config/redis.js';
@@ -64,6 +66,8 @@ app.get('/ready', (req, res) => {
 swaggerSetup(app);
 
 app.use('/api/orders', orderRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/discounts', discountRoutes);
 
 app.use(errorHandler);
 
