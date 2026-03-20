@@ -21,6 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Snyk token availability
+        run: |
+          if [ -z "${{ secrets.SNYK_TOKEN }}" ]; then
+            echo "SNYK_TOKEN is not configured. Skipping dependency scan."
+            exit 0
+          fi
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -31,6 +38,7 @@ jobs:
         run: npm ci
 
       - name: Run Snyk dependency test
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         uses: snyk/actions/node@master
         continue-on-error: true
         env:
@@ -39,8 +47,8 @@ jobs:
           args: --severity-threshold=high --sarif-file-output=snyk-node.sarif
 
       - name: Upload dependency scan SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('snyk-node.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk-node.sarif
 
@@ -52,10 +60,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Snyk token availability
+        run: |
+          if [ -z "${{ secrets.SNYK_TOKEN }}" ]; then
+            echo "SNYK_TOKEN is not configured. Skipping container scan."
+            exit 0
+          fi
+
       - name: Build Docker image
         run: docker build -t order-backend:ci .
 
       - name: Run Snyk container test
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         uses: snyk/actions/docker@master
         continue-on-error: true
         env:
@@ -65,7 +81,7 @@ jobs:
           args: --file=Dockerfile --severity-threshold=high --sarif-file-output=snyk-container.sarif
 
       - name: Upload container scan SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('snyk-container.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk-container.sarif
