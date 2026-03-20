@@ -13,3 +13,12 @@ yarn-error.log*
 
 # OS files
 .DS_Store
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Local cloud configuration
+.aws/credentials
+.aws/config
