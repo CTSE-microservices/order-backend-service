@@ -1,20 +1,11 @@
 import swaggerUi from 'swagger-ui-express';
-import swaggerJsdoc from 'swagger-jsdoc';
 import { Express } from 'express';
-
-const options = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Order Service API',
-      version: '1.0.0',
-    },
-  },
-  apis: ['./src/api/**/*.ts'],
-};
-
-const specs = swaggerJsdoc(options);
+import { openApiSpec } from './openapi.js';
 
 export const swaggerSetup = (app: Express) => {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+  app.get('/openapi.json', (_req, res) => {
+    res.json(openApiSpec);
+  });
+
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 };
