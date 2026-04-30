@@ -55,7 +55,7 @@ export class CartController {
         return res.status(400).json({ error: 'quantity must be >= 1' });
       }
 
-      const data = CartService.updateCartItem(getUserUuid(req), itemId, quantity);
+      const data = CartService.updateCartItem(getUserUuid(req), itemId, { quantity });
       res.json({ message: 'Cart item updated', data });
     } catch (err) {
       res.status(400).json({ error: extractErrorMessage(err) });
