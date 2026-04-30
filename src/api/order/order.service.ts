@@ -1,211 +1,247 @@
-type CartItemInput = {
-	productId: string;
-	productName?: string;
-	quantity: number;
-	price: number;
-};
+import { prisma } from '../../config/database.js';
 
-type CartItem = {
-	itemId: string;
-	productId: string;
-	productName: string;
-	quantity: number;
-	unitPrice: number;
-	totalPrice: number;
-};
+// Fire-and-forget stock reduction — non-fatal if product service is unreachable
+async function reduceStock(productId: string, quantity: number): Promise<void> {
+  const url = process.env.PRODUCT_SERVICE_URL;
+  if (!url) return;
+  try {
+    await fetch(`${url}/api/products/reduce-stock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // product_id in cart is stored as String; product service uses Int PKs
+      body: JSON.stringify({ productId: parseInt(productId, 10), quantity }),
+    });
+  } catch (err) {
+    console.error('[order-service] stock reduction failed (non-fatal):', err);
+  }
+}
 
-type CartSnapshot = {
-	userUuid: string;
-	items: CartItem[];
-	subtotal: number;
-	discountAmount: number;
-	finalAmount: number;
-	discountCode?: string;
-};
-
-type OrderRecord = {
-	id: number;
-	userUuid: string;
-	status: string;
-	totalAmount: number;
-	discountAmount: number;
-	finalAmount: number;
-	createdAt: string;
-	items: CartItem[];
-};
-
-const carts = new Map<string, CartSnapshot>();
-const orders = new Map<string, OrderRecord[]>();
-
-const buildCart = (userUuid: string): CartSnapshot => {
-	const cart = carts.get(userUuid);
-	if (cart) {
-		return cart;
-	}
-
-	const initialCart: CartSnapshot = {
-		userUuid,
-		items: [],
-		subtotal: 0,
-		discountAmount: 0,
-		finalAmount: 0
-	};
-	carts.set(userUuid, initialCart);
-	return initialCart;
-};
-
-const recalcCart = (cart: CartSnapshot): CartSnapshot => {
-	const subtotal = cart.items.reduce((acc, item) => acc + item.totalPrice, 0);
-	const discountAmount = Math.min(cart.discountAmount, subtotal);
-	const updated: CartSnapshot = {
-		...cart,
-		subtotal,
-		discountAmount,
-		finalAmount: subtotal - discountAmount
-	};
-	carts.set(cart.userUuid, updated);
-	return updated;
-};
+async function upsertStatus(code: string, description?: string, type?: string) {
+  return prisma.order_status.upsert({
+    where: { code },
+    update: {},
+    create: { code, description: description ?? code, type: type ?? 'system' },
+  });
+}
 
 export class OrderService {
-	static getCart(userUuid: string): CartSnapshot {
-		return recalcCart(buildCart(userUuid));
-	}
+  // ── Cart discount helpers (used by DiscountService) ──────────────────────
 
-	static addCartItem(userUuid: string, input: CartItemInput): CartSnapshot {
-		const cart = buildCart(userUuid);
-		const existing = cart.items.find((item) => item.productId === input.productId);
+  static async applyDiscount(userUuid: string, code: string) {
+    const discount = await prisma.discount.findFirst({
+      where: { code, is_active: true, is_deleted: false },
+    });
+    if (!discount) throw new Error('Invalid or expired discount code');
 
-		if (existing) {
-			existing.quantity += input.quantity;
-			existing.totalPrice = existing.quantity * existing.unitPrice;
-			return recalcCart(cart);
-		}
+    const cart = await prisma.cart.findFirst({
+      where: { user_uuid: userUuid, is_deleted: false },
+    });
+    if (!cart) throw new Error('Cart not found');
 
-		cart.items.push({
-			itemId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-			productId: input.productId,
-			productName: input.productName ?? input.productId,
-			quantity: input.quantity,
-			unitPrice: input.price,
-			totalPrice: input.quantity * input.price
-		});
+    return prisma.cart.update({
+      where: { id: cart.id },
+      data: { discount_id: discount.id },
+    });
+  }
 
-		return recalcCart(cart);
-	}
+  static async removeDiscount(userUuid: string) {
+    const cart = await prisma.cart.findFirst({
+      where: { user_uuid: userUuid, is_deleted: false },
+    });
+    if (!cart) throw new Error('Cart not found');
+    return prisma.cart.update({
+      where: { id: cart.id },
+      data: { discount_id: null, discount_amount: 0 },
+    });
+  }
 
-	static updateCartItem(userUuid: string, itemId: string, quantity: number): CartSnapshot {
-		const cart = buildCart(userUuid);
-		const item = cart.items.find((cartItem) => cartItem.itemId === itemId);
+  static async validateDiscount(code: string, orderAmount: number) {
+    const discount = await prisma.discount.findFirst({
+      where: {
+        code,
+        is_active: true,
+        is_deleted: false,
+        OR: [{ expires_at: null }, { expires_at: { gte: new Date() } }],
+      },
+    });
+    if (!discount) return { valid: false, reason: 'Invalid or expired discount code' };
+    if (discount.min_order_amount && orderAmount < Number(discount.min_order_amount)) {
+      return { valid: false, reason: `Minimum order amount is ${discount.min_order_amount}` };
+    }
+    return { valid: true, discount };
+  }
 
-		if (!item) {
-			throw new Error('Cart item not found');
-		}
+  // ── Orders ───────────────────────────────────────────────────────────────
 
-		item.quantity = quantity;
-		item.totalPrice = item.quantity * item.unitPrice;
-		return recalcCart(cart);
-	}
+  static async createOrder(userUuid: string, _data: Record<string, unknown> = {}) {
+    const cart = await prisma.cart.findFirst({
+      where: { user_uuid: userUuid, is_deleted: false },
+      include: {
+        cart_item: { where: { is_deleted: false } },
+        discount: true,
+      },
+    });
 
-	static removeCartItem(userUuid: string, itemId: string): CartSnapshot {
-		const cart = buildCart(userUuid);
-		cart.items = cart.items.filter((item) => item.itemId !== itemId);
-		return recalcCart(cart);
-	}
+    if (!cart || cart.cart_item.length === 0) throw new Error('Cart is empty');
 
-	static clearCart(userUuid: string): CartSnapshot {
-		const emptyCart: CartSnapshot = {
-			userUuid,
-			items: [],
-			subtotal: 0,
-			discountAmount: 0,
-			finalAmount: 0
-		};
-		carts.set(userUuid, emptyCart);
-		return emptyCart;
-	}
+    const totalAmount = cart.cart_item.reduce(
+      (sum, item) => sum + Number(item.unit_price) * item.quantity,
+      0
+    );
 
-	static applyDiscount(userUuid: string, code: string): CartSnapshot {
-		const cart = buildCart(userUuid);
-		cart.discountCode = code;
-		cart.discountAmount = Number((cart.subtotal * 0.1).toFixed(2));
-		return recalcCart(cart);
-	}
+    // Calculate discount
+    let discountAmount = 0;
+    const discount = cart.discount;
+    if (discount) {
+      const meetsMinimum =
+        !discount.min_order_amount || totalAmount >= Number(discount.min_order_amount);
+      if (meetsMinimum) {
+        if (discount.type === 'PERCENTAGE') {
+          discountAmount = totalAmount * (Number(discount.value) / 100);
+        } else {
+          discountAmount = Number(discount.value);
+        }
+        if (discount.max_discount_amount) {
+          discountAmount = Math.min(discountAmount, Number(discount.max_discount_amount));
+        }
+        discountAmount = Math.min(discountAmount, totalAmount);
+      }
+    }
 
-	static removeDiscount(userUuid: string): CartSnapshot {
-		const cart = buildCart(userUuid);
-		cart.discountCode = undefined;
-		cart.discountAmount = 0;
-		return recalcCart(cart);
-	}
+    const finalAmount = totalAmount - discountAmount;
+    const pendingStatus = await upsertStatus('PENDING', 'Order placed, awaiting payment', 'initial');
 
-	static validateDiscount(code: string, orderAmount: number) {
-		const valid = code.trim().length > 0 && orderAmount >= 0;
-		return {
-			valid,
-			code,
-			orderAmount,
-			discountAmount: valid ? Number((orderAmount * 0.1).toFixed(2)) : 0
-		};
-	}
+    const order = await prisma.$transaction(async (tx) => {
+      const newOrder = await tx.orders.create({
+        data: {
+          user_uuid: userUuid,
+          status_id: pendingStatus.id,
+          total_amount: totalAmount,
+          discount_id: discount?.id ?? null,
+          discount_amount: discountAmount,
+          final_amount: finalAmount,
+          created_by: userUuid,
+          order_item: {
+            create: cart.cart_item.map((item) => ({
+              product_id: item.product_id,
+              product_name: item.product_name,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: Number(item.unit_price) * item.quantity,
+              created_by: userUuid,
+            })),
+          },
+          order_status_history: {
+            create: { status_id: pendingStatus.id, changed_by: userUuid },
+          },
+        },
+        include: {
+          order_item: true,
+          order_status: true,
+          order_status_history: { include: { order_status: true } },
+        },
+      });
 
-	static createOrder(userUuid: string): OrderRecord {
-		const cart = buildCart(userUuid);
-		const normalizedCart = recalcCart(cart);
+      // Soft-delete the cart and its items
+      await tx.cart_item.updateMany({
+        where: { cart_id: cart.id },
+        data: { is_deleted: true, deleted_at: new Date() },
+      });
+      await tx.cart.update({
+        where: { id: cart.id },
+        data: { is_deleted: true, deleted_at: new Date(), updated_by: userUuid },
+      });
 
-		if (normalizedCart.items.length === 0) {
-			throw new Error('Cart is empty');
-		}
+      return newOrder;
+    });
 
-		const record: OrderRecord = {
-			id: Date.now(),
-			userUuid,
-			status: 'PLACED',
-			totalAmount: normalizedCart.subtotal,
-			discountAmount: normalizedCart.discountAmount,
-			finalAmount: normalizedCart.finalAmount,
-			createdAt: new Date().toISOString(),
-			items: normalizedCart.items
-		};
+    // Reduce stock in product service (non-blocking)
+    for (const item of cart.cart_item) {
+      reduceStock(item.product_id, item.quantity);
+    }
 
-		const userOrders = orders.get(userUuid) ?? [];
-		userOrders.unshift(record);
-		orders.set(userUuid, userOrders);
-		this.clearCart(userUuid);
+    return order;
+  }
 
-		return record;
-	}
+  static async listOrders(userUuid: string) {
+    return prisma.orders.findMany({
+      where: { user_uuid: userUuid, is_deleted: false },
+      include: { order_item: { where: { is_deleted: false } }, order_status: true },
+      orderBy: { created_at: 'desc' },
+    });
+  }
 
-	static listOrders(userUuid: string): OrderRecord[] {
-		return orders.get(userUuid) ?? [];
-	}
+  static async getOrder(orderId: number, userUuid: string) {
+    const order = await prisma.orders.findFirst({
+      where: { id: orderId, user_uuid: userUuid, is_deleted: false },
+      include: {
+        order_item: { where: { is_deleted: false } },
+        order_status: true,
+        order_status_history: {
+          where: { is_deleted: false },
+          include: { order_status: true },
+          orderBy: { changed_at: 'desc' },
+        },
+      },
+    });
+    if (!order) throw new Error('Order not found');
+    return order;
+  }
 
-	static getOrderById(userUuid: string, orderId: number): OrderRecord {
-		const order = (orders.get(userUuid) ?? []).find((entry) => entry.id === orderId);
-		if (!order) {
-			throw new Error('Order not found');
-		}
-		return order;
-	}
+  static async getOrderHistory(orderId: number, userUuid: string) {
+    const order = await prisma.orders.findFirst({
+      where: { id: orderId, user_uuid: userUuid, is_deleted: false },
+    });
+    if (!order) throw new Error('Order not found');
+    return prisma.order_status_history.findMany({
+      where: { order_id: orderId, is_deleted: false },
+      include: { order_status: true },
+      orderBy: { changed_at: 'desc' },
+    });
+  }
 
-	static updateOrderStatus(userUuid: string, orderId: number, status: string): OrderRecord {
-		const order = this.getOrderById(userUuid, orderId);
-		order.status = status;
-		return order;
-	}
+  static async updateOrderStatus(orderId: number, statusCode: string, userUuid: string) {
+    const order = await prisma.orders.findFirst({
+      where: { id: orderId, is_deleted: false },
+    });
+    if (!order) throw new Error('Order not found');
 
-	static cancelOrder(userUuid: string, orderId: number): OrderRecord {
-		return this.updateOrderStatus(userUuid, orderId, 'CANCELLED');
-	}
+    const status = await upsertStatus(statusCode);
 
-	static getOrderStatusHistory(userUuid: string, orderId: number) {
-		const order = this.getOrderById(userUuid, orderId);
-		return [
-			{
-				status: order.status,
-				changedAt: new Date().toISOString(),
-				changedBy: userUuid
-			}
-		];
-	}
+    return prisma.$transaction(async (tx) => {
+      await tx.order_status_history.create({
+        data: { order_id: orderId, status_id: status.id, changed_by: userUuid },
+      });
+      return tx.orders.update({
+        where: { id: orderId },
+        data: { status_id: status.id, updated_by: userUuid },
+        include: { order_status: true, order_item: { where: { is_deleted: false } } },
+      });
+    });
+  }
+
+  static async cancelOrder(orderId: number, userUuid: string) {
+    const order = await prisma.orders.findFirst({
+      where: { id: orderId, user_uuid: userUuid, is_deleted: false },
+      include: { order_status: true },
+    });
+    if (!order) throw new Error('Order not found');
+    if (order.order_status.code === 'CANCELLED') throw new Error('Order is already cancelled');
+    if (['SHIPPED', 'DELIVERED'].includes(order.order_status.code)) {
+      throw new Error('Cannot cancel an order that has already been shipped or delivered');
+    }
+
+    const cancelledStatus = await upsertStatus('CANCELLED', 'Order cancelled by user', 'terminal');
+
+    return prisma.$transaction(async (tx) => {
+      await tx.order_status_history.create({
+        data: { order_id: orderId, status_id: cancelledStatus.id, changed_by: userUuid },
+      });
+      return tx.orders.update({
+        where: { id: orderId },
+        data: { status_id: cancelledStatus.id, updated_by: userUuid },
+        include: { order_status: true },
+      });
+    });
+  }
 }
