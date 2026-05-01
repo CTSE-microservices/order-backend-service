@@ -62,6 +62,19 @@ export class OrderController {
 		}
 	}
 
+	static async getCheckoutUrl(req: Request, res: Response) {
+		try {
+			const orderId = parseOrderId(req.params.orderId);
+			const checkoutUrl = await OrderService.getCheckoutUrl(orderId, getUserUuid(req));
+			if (!checkoutUrl) {
+				return res.status(202).json({ message: 'Checkout URL not ready yet', data: null });
+			}
+			res.json({ message: 'Checkout URL ready', data: { checkoutUrl } });
+		} catch (err) {
+			res.status(404).json({ error: extractErrorMessage(err) });
+		}
+	}
+
 	static async updateOrderStatus(req: Request, res: Response) {
 		try {
 			const orderId = parseOrderId(req.params.orderId);

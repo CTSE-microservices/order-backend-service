@@ -28,14 +28,14 @@ const extractErrorMessage = (err: unknown): string => {
 };
 
 export class CartController {
-  static getCart(req: Request, res: Response) {
-    const data = CartService.getCart(getUserUuid(req));
+  static async getCart(req: Request, res: Response) {
+    const data = await CartService.getCart(getUserUuid(req));
     res.json({ message: 'Cart fetched', data });
   }
 
-  static addCartItem(req: Request, res: Response) {
+  static async addCartItem(req: Request, res: Response) {
     try {
-      const data = CartService.addCartItem(getUserUuid(req), {
+      const data = await CartService.addCartItem(getUserUuid(req), {
         productId: String(req.body.productId),
         productName: req.body.productName ? String(req.body.productName) : undefined,
         quantity: Number(req.body.quantity),
@@ -47,7 +47,7 @@ export class CartController {
     }
   }
 
-  static updateCartItem(req: Request, res: Response) {
+  static async updateCartItem(req: Request, res: Response) {
     try {
       const itemId = parseItemId(req.params.itemId);
       const quantity = Number(req.body.quantity);
@@ -55,25 +55,25 @@ export class CartController {
         return res.status(400).json({ error: 'quantity must be >= 1' });
       }
 
-      const data = CartService.updateCartItem(getUserUuid(req), itemId, { quantity });
+      const data = await CartService.updateCartItem(getUserUuid(req), itemId, { quantity });
       res.json({ message: 'Cart item updated', data });
     } catch (err) {
       res.status(400).json({ error: extractErrorMessage(err) });
     }
   }
 
-  static removeCartItem(req: Request, res: Response) {
+  static async removeCartItem(req: Request, res: Response) {
     try {
       const itemId = parseItemId(req.params.itemId);
-      const data = CartService.removeCartItem(getUserUuid(req), itemId);
+      const data = await CartService.removeCartItem(getUserUuid(req), itemId);
       res.json({ message: 'Cart item removed', data });
     } catch (err) {
       res.status(400).json({ error: extractErrorMessage(err) });
     }
   }
 
-  static clearCart(req: Request, res: Response) {
-    const data = CartService.clearCart(getUserUuid(req));
+  static async clearCart(req: Request, res: Response) {
+    const data = await CartService.clearCart(getUserUuid(req));
     res.json({ message: 'Cart cleared', data });
   }
 }
