@@ -165,7 +165,7 @@ export class OrderService {
     // Publish order.confirmed so the payment service can create a Stripe session
     await publishOrderEvent(RK_ORDER_CONFIRMED, {
       orderId: String(order.id),
-      userId: userUuid,
+      userId: "0000000-0000-0000-0000-000000000001",
       amount: Number(order.final_amount),
       currency: 'usd',
       items: order.order_item.map((item) => ({
