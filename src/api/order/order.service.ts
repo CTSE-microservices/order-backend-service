@@ -1,4 +1,6 @@
 import { prisma } from '../../config/database.js';
+import { publishOrderEvent } from '../../utils/rabbitmqPublisher.js';
+import { RK_ORDER_CONFIRMED } from '../../config/rabbitmq.js';
 
 // Fire-and-forget stock reduction — non-fatal if product service is unreachable
 async function reduceStock(productId: string, quantity: number): Promise<void> {
@@ -159,6 +161,19 @@ export class OrderService {
     for (const item of cart.cart_item) {
       reduceStock(item.product_id, item.quantity);
     }
+
+    // Publish order.confirmed so the payment service can create a Stripe session
+    await publishOrderEvent(RK_ORDER_CONFIRMED, {
+      orderId: String(order.id),
+      userId: userUuid,
+      amount: Number(order.final_amount),
+      currency: 'usd',
+      items: order.order_item.map((item) => ({
+        name: item.product_name,
+        quantity: item.quantity,
+        price: Number(item.unit_price),
+      })),
+    });
 
     return order;
   }
