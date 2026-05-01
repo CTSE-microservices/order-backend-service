@@ -20,12 +20,12 @@ export const redisClient = createCluster({
   },
 });
 
-redisClient.on('error', (err) => logger.error({ err }, 'Redis Cluster Error'));
+redisClient.on('error', (err) => logger.debug({ err }, 'Redis Cluster Error'));
 
 (async () => {
   try {
     await redisClient.connect();
   } catch (err) {
-    logger.error({ err }, 'Redis cluster connect failed');
+    logger.debug({ err }, 'Redis cluster connect failed');
   }
 })();

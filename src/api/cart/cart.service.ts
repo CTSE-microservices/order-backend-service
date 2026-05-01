@@ -34,7 +34,10 @@ export class CartService {
     if (existing) {
       return prisma.cart_item.update({
         where: { id: existing.id },
-        data: { quantity: existing.quantity + input.quantity },
+        data: {
+          quantity: existing.quantity + input.quantity,
+          total_price: Number(existing.unit_price) * (existing.quantity + input.quantity),
+        },
       });
     }
 
@@ -45,6 +48,7 @@ export class CartService {
         product_name: input.productName ?? input.productId,
         quantity: input.quantity,
         unit_price: input.price,
+        total_price: input.price * input.quantity,
         created_by: userUuid,
       },
     });
@@ -64,7 +68,13 @@ export class CartService {
       },
     });
     if (!item) throw new Error('Cart item not found');
-    return prisma.cart_item.update({ where: { id }, data: { quantity: data.quantity } });
+    return prisma.cart_item.update({
+      where: { id },
+      data: {
+        quantity: data.quantity,
+        total_price: Number(item.unit_price) * data.quantity,
+      },
+    });
   }
 
   static async removeCartItem(userUuid: string, itemId: string) {
