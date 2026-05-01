@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { OrderService } from './order.service.js';
 
-const getUserUuid = (req: Request): string => req.user_uuid ?? 'demo-user';
+const getUserUuid = (req: Request): number => req.user_uuid as number;
 
 const toSingleParam = (value: string | string[] | undefined, label: string): string => {
 	if (Array.isArray(value)) {
