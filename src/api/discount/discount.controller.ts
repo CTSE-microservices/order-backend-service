@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { DiscountService } from './discount.service.js';
 
-const getUserUuid = (req: Request): string => req.user_uuid ?? 'demo-user';
+const getUserUuid = (req: Request): number => req.user_uuid as number;
 
 export class DiscountController {
   static applyDiscount(req: Request, res: Response) {

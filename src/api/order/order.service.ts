@@ -29,7 +29,7 @@ async function upsertStatus(code: string, description?: string, type?: string) {
 export class OrderService {
   // ── Cart discount helpers (used by DiscountService) ──────────────────────
 
-  static async applyDiscount(userUuid: string, code: string) {
+  static async applyDiscount(userUuid: number, code: string) {
     const discount = await prisma.discount.findFirst({
       where: { code, is_active: true, is_deleted: false },
     });
@@ -46,7 +46,7 @@ export class OrderService {
     });
   }
 
-  static async removeDiscount(userUuid: string) {
+  static async removeDiscount(userUuid: number) {
     const cart = await prisma.cart.findFirst({
       where: { user_uuid: userUuid, is_deleted: false },
     });
@@ -75,7 +75,7 @@ export class OrderService {
 
   // ── Orders ───────────────────────────────────────────────────────────────
 
-  static async createOrder(userUuid: string, _data: Record<string, unknown> = {}) {
+  static async createOrder(userUuid: number, _data: Record<string, unknown> = {}) {
     const cart = await prisma.cart.findFirst({
       where: { user_uuid: userUuid, is_deleted: false },
       include: {
@@ -165,7 +165,7 @@ export class OrderService {
     // Publish order.confirmed so the payment service can create a Stripe session
     await publishOrderEvent(RK_ORDER_CONFIRMED, {
       orderId: String(order.id),
-      userId: "0000000-0000-0000-0000-000000000001",
+      userId: String(userUuid),
       amount: Number(order.final_amount),
       currency: 'usd',
       items: order.order_item.map((item) => ({
@@ -178,7 +178,7 @@ export class OrderService {
     return order;
   }
 
-  static async listOrders(userUuid: string) {
+  static async listOrders(userUuid: number) {
     return prisma.orders.findMany({
       where: { user_uuid: userUuid, is_deleted: false },
       include: { order_item: { where: { is_deleted: false } }, order_status: true },
@@ -186,7 +186,7 @@ export class OrderService {
     });
   }
 
-  static async getOrder(orderId: number, userUuid: string) {
+  static async getOrder(orderId: number, userUuid: number) {
     const order = await prisma.orders.findFirst({
       where: { id: orderId, user_uuid: userUuid, is_deleted: false },
       include: {
@@ -203,7 +203,7 @@ export class OrderService {
     return order;
   }
 
-  static async getOrderHistory(orderId: number, userUuid: string) {
+  static async getOrderHistory(orderId: number, userUuid: number) {
     const order = await prisma.orders.findFirst({
       where: { id: orderId, user_uuid: userUuid, is_deleted: false },
     });
@@ -215,7 +215,7 @@ export class OrderService {
     });
   }
 
-  static async updateOrderStatus(orderId: number, statusCode: string, userUuid: string) {
+  static async updateOrderStatus(orderId: number, statusCode: string, userUuid: number) {
     const order = await prisma.orders.findFirst({
       where: { id: orderId, is_deleted: false },
     });
@@ -235,7 +235,7 @@ export class OrderService {
     });
   }
 
-  static async cancelOrder(orderId: number, userUuid: string) {
+  static async cancelOrder(orderId: number, userUuid: number) {
     const order = await prisma.orders.findFirst({
       where: { id: orderId, user_uuid: userUuid, is_deleted: false },
       include: { order_status: true },

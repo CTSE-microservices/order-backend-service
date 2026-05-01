@@ -78,7 +78,7 @@ export async function startPaymentConsumer(): Promise<void> {
           logger.warn({ orderId }, 'Order not found for payment success');
         } else {
           await prisma.order_status_history.create({
-            data: { order_id: orderId, status_id: status.id, changed_by: payload.orderId },
+            data: { order_id: orderId, status_id: status.id, changed_by: null },
           });
           logger.info({ orderId }, 'Order status updated to PAYMENT_SUCCESS');
         }
@@ -94,7 +94,7 @@ export async function startPaymentConsumer(): Promise<void> {
           logger.warn({ orderId }, 'Order not found for payment failure');
         } else {
           await prisma.order_status_history.create({
-            data: { order_id: orderId, status_id: status.id, changed_by: payload.orderId },
+            data: { order_id: orderId, status_id: status.id, changed_by: null },
           });
           logger.info({ orderId }, 'Order status updated to PAYMENT_FAILED');
         }

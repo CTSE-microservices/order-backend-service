@@ -8,7 +8,7 @@ export type CartItemInput = {
 };
 
 export class CartService {
-  private static async getOrCreateCart(userUuid: string) {
+  private static async getOrCreateCart(userUuid: number) {
     let cart = await prisma.cart.findFirst({
       where: { user_uuid: userUuid, is_deleted: false },
       include: { cart_item: { where: { is_deleted: false } } },
@@ -22,11 +22,11 @@ export class CartService {
     return cart;
   }
 
-  static async getCart(userUuid: string) {
+  static async getCart(userUuid: number) {
     return CartService.getOrCreateCart(userUuid);
   }
 
-  static async addCartItem(userUuid: string, input: CartItemInput) {
+  static async addCartItem(userUuid: number, input: CartItemInput) {
     const cart = await CartService.getOrCreateCart(userUuid);
 
     // If same product already in cart, increment quantity
@@ -55,7 +55,7 @@ export class CartService {
   }
 
   static async updateCartItem(
-    userUuid: string,
+    userUuid: number,
     itemId: string,
     data: { quantity: number }
   ) {
@@ -77,7 +77,7 @@ export class CartService {
     });
   }
 
-  static async removeCartItem(userUuid: string, itemId: string) {
+  static async removeCartItem(userUuid: number, itemId: string) {
     const id = parseInt(itemId, 10);
     const item = await prisma.cart_item.findFirst({
       where: {
@@ -93,7 +93,7 @@ export class CartService {
     });
   }
 
-  static async clearCart(userUuid: string) {
+  static async clearCart(userUuid: number) {
     const cart = await prisma.cart.findFirst({
       where: { user_uuid: userUuid, is_deleted: false },
     });

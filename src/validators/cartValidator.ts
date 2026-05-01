@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 export const validateCartItem = (req: Request, res: Response, next: NextFunction) => {
   const schema = Joi.object({
     productId: Joi.string().required(),
+    productName: Joi.string().optional(),
     quantity: Joi.number().integer().min(1).required(),
     price: Joi.number().min(0).required()
   });

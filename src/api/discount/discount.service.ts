@@ -1,11 +1,11 @@
 import { OrderService } from '../order/order.service.js';
 
 export class DiscountService {
-  static async applyDiscount(userUuid: string, code: string) {
+  static async applyDiscount(userUuid: number, code: string) {
     return OrderService.applyDiscount(userUuid, code);
   }
 
-  static async removeDiscount(userUuid: string) {
+  static async removeDiscount(userUuid: number) {
     return OrderService.removeDiscount(userUuid);
   }
 
